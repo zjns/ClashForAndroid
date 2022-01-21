@@ -37,6 +37,10 @@ class AccessControlDesign(
         AccessControlMenu(context, binding.menuView, uiStore, requests)
     }
 
+    private val filter = Channel<Unit>(Channel.CONFLATED)
+    private var appsLoaded = false
+    private var pendingKeyword = ""
+
     val apps: List<AppInfo>
         get() = adapter.apps
 
@@ -45,6 +49,11 @@ class AccessControlDesign(
 
     suspend fun patchApps(apps: List<AppInfo>) {
         adapter.swapDataSet(adapter::apps, apps, false)
+        appsLoaded = true
+        if (pendingKeyword.isNotEmpty()) {
+            filter.trySend(Unit)
+            pendingKeyword = ""
+        }
     }
 
     suspend fun rebindAll() {
@@ -86,14 +95,17 @@ class AccessControlDesign(
                 .inflate(context.layoutInflater, context.root, false)
             val adapter = AppAdapter(context, selected)
             val dialog = FullScreenDialog(context)
-            val filter = Channel<Unit>(Channel.CONFLATED)
 
             dialog.setContentView(binding.root)
 
             binding.surface = dialog.surface
             binding.mainList.applyLinearAdapter(context, adapter)
             binding.keywordView.addTextChangedListener {
-                filter.trySend(Unit)
+                if (appsLoaded) {
+                    filter.trySend(Unit)
+                } else {
+                    pendingKeyword = it?.toString() ?: ""
+                }
             }
             binding.closeView.setOnClickListener {
                 dialog.dismiss()
